@@ -6,24 +6,24 @@
 #include <sys/mman.h>
 #include <stddef.h>
 
-#define BLOCKNUM 65536	//Ò»¹²64K¸öÒ³ 
-#define BLOCKSIZE 32768	//Ã¿Ò³32K 
+#define BLOCKNUM 65536	//ä¸€å…±64Kä¸ªé¡µ 
+#define BLOCKSIZE 32768	//æ¯é¡µ32K 
 #define SUCCESS	1
 #define FAIL -1
 #define Memory_Space_Insufficient -2
 #define MORE_THAN_BIGGEST_FILE -3
-#define MAX_BLOCK_NUM 10240	//µ¥¶ÀÎÄ¼þ×î´ó¿éÊý 
+#define MAX_BLOCK_NUM 10240	//å•ç‹¬æ–‡ä»¶æœ€å¤§å—æ•° 
 
 static const size_t size = 2 * 1024 * 1024 * (size_t)1024;	//2G 
 static const void* mem[BLOCKNUM];
-int unused_num = BLOCKNUM;	//³õÊ¼ 
-int last_block = 0;	//×îºóÒ»´Î·ÖÅäºóµÄ×îºóÒ»¿é 
+int unused_num = BLOCKNUM;	//åˆå§‹ 
+int last_block = 0;	//æœ€åŽä¸€æ¬¡åˆ†é…åŽçš„æœ€åŽä¸€å— 
 
 struct filenode{
-	char filename[256];
-	int32_t content[MAX_BLOCK_NUM];		//´æ´¢ÎÄ¼þÕ¼ÓÃµÄ¿éµÄÎ»ÖÃ 
-    int32_t memlocation;	//½ÚµãµÄÎ»ÖÃ 
-    int32_t filesize;	//ÎÄ¼þ´óÐ¡£¬µ¥Î»Îª¿é 
+    char filename[256];
+    int32_t content[MAX_BLOCK_NUM];		//å­˜å‚¨æ–‡ä»¶å ç”¨çš„å—çš„ä½ç½® 
+    int32_t memlocation;	//èŠ‚ç‚¹çš„ä½ç½® 
+    int32_t filesize;	//æ–‡ä»¶å¤§å°ï¼Œå•ä½ä¸ºå— 
     struct stat st;
     struct filenode *next;
 }; 
@@ -36,7 +36,7 @@ int find_unused(){
 			last_block = i;
 			return i;
 		}
-	}
+	}	
 	return FAIL;
 }
 
@@ -54,15 +54,16 @@ int block_malloc(struct filenode* node, int num){
 			mem[i] = mmap(NULL,BLOCKSIZE,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
 			unused_num --;
 			num --;
-		}	//·ÖÅän¿é¿Õ¼ä 
+		}	//åˆ†é…nå—ç©ºé—´ 
 		return SUCCESS;
 	}
+	return FAIL;	//åˆ†é…å¤±è´¥
 }
 
 
 void block_delete(struct filenode* node, int num){
-	if(num > node->filesize)	//É¾³ý³¤¶È±ÈÎÄ¼þ±¾Éí´ó
-		num = node->filesize;	//É¾³ýÍê
+	if(num > node->filesize)	//åˆ é™¤é•¿åº¦æ¯”æ–‡ä»¶æœ¬èº«å¤§
+		num = node->filesize;	//åˆ é™¤å®Œ
 	int location;
 	while(num > 0){
 		location = node->content[node->filesize - 1];
@@ -98,7 +99,7 @@ static struct filenode *get_filenode(const char *name)
 static int create_filenode(const char* filename, const struct stat* st){
 	int avail;
 	if(unused_num == 0)
-		return -ENOSPC;	//ÄÚ´æ²»×ã 
+		return -ENOSPC;	//å†…å­˜ä¸è¶³ 
 	avail = find_unused();
 	mem[avail] = mmap(NULL,BLOCKSIZE,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
 	unused_num --;
@@ -113,7 +114,7 @@ static int create_filenode(const char* filename, const struct stat* st){
 	}
 	else{
 		newnode->next = root->next;
-		root->next = newnode;	//Í·²å·¨ 
+		root->next = newnode;	//å¤´æ’æ³• 
 	}
 	return 0;
 }
@@ -177,14 +178,14 @@ static int oshfs_write(const char *path, const char *buf, size_t size, off_t off
 	struct filenode* node = get_filenode(path);
 	if(node == NULL)
 		return -ENOENT;
-	int offset_out = offset / BLOCKSIZE;	//¿é¼äÆ«ÒÆ
-	int offset_in = offset % BLOCKSIZE;		//¿éÄÚÆ«ÒÆ 
+	int offset_out = offset / BLOCKSIZE;	//å—é—´åç§»
+	int offset_in = offset % BLOCKSIZE;		//å—å†…åç§» 
 	int start_node, write = 0;
 	if(offset + size > node->st.st_size){
         node->st.st_size = offset + size;
         int block_need = (node->st.st_size - 1) / BLOCKSIZE + 1;
         if(block_need > node->filesize){
-        	int ret = block_malloc(node, block_need - node->filesize);	//·ÖÅä¿Õ¼ä 
+        	int ret = block_malloc(node, block_need - node->filesize);	//åˆ†é…ç©ºé—´ 
         	if(ret == Memory_Space_Insufficient) 
         		return -ENOSPC;
         	else if(ret == MORE_THAN_BIGGEST_FILE)
@@ -196,13 +197,13 @@ static int oshfs_write(const char *path, const char *buf, size_t size, off_t off
 		if(BLOCKSIZE - offset_in >= size - write){
 			memcpy(mem[start_node] + offset_in, buf + write, size - write);
 			write = size;
-		}	//·Ö×îºóÒ»¿é 
+		}	//åˆ†æœ€åŽä¸€å— 
 		else{
 			memcpy(mem[start_node] + offset_in, buf + write, BLOCKSIZE - offset_in);
 			write = BLOCKSIZE - offset_in;
 			offset_out ++;
 			offset_in = 0;
-		}//ÏÈ°Ñ²»×ãÒ»¿éÌîÂú£¬È»ºóÖð½¥ÌîÐ´ÍêÕûµÄ¿é 
+		}//å…ˆæŠŠä¸è¶³ä¸€å—å¡«æ»¡ï¼Œç„¶åŽé€æ¸å¡«å†™å®Œæ•´çš„å— 
 	}	
 	return size;
 }
@@ -249,7 +250,7 @@ static int oshfs_unlink(const char *path){
 		return -ENOENT;
 	struct filenode* p = (struct filenode*)mem[0];
 	for(p = (struct filenode*)mem[0]; p != NULL; p = p->next){
-		if(p->next == node)	//ÕÒµ½ÒªÉ¾³ýµÄ½Úµã 
+		if(p->next == node)	//æ‰¾åˆ°è¦åˆ é™¤çš„èŠ‚ç‚¹ 
 				p->next = node->next;
 	}
 	block_delete(node, node->filesize);
